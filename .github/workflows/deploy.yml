@@ -1,0 +1,56 @@
+name: deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 让 GHA 能读代码并请求 OIDC 身份
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION:     ${{ secrets.REGION }}
+      SERVICE:    ${{ secrets.SERVICE }}
+      AR_REPO:    ${{ secrets.AR_REPO }}
+      IMAGE:      ${{ secrets.AR_REPO }}:${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 通过 OIDC 登录 GCP（不需要 JSON key）
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Artifact Registry Docker auth
+        # ${AR_REPO%%/*} 取出仓库域前缀：us-central1-docker.pkg.dev
+        run: gcloud auth configure-docker "${AR_REPO%%/*}" --quiet
+
+      - name: Build & push image
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region:  ${{ env.REGION }}
+          image:   ${{ env.IMAGE }}
+          allow-unauthenticated: true
