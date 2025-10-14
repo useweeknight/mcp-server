@@ -5,52 +5,62 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# 让 GHA 能读代码并请求 OIDC 身份
 permissions:
   contents: read
-  id-token: write
+  id-token: write   # OIDC 必须
 
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.REGION }}
+  SERVICE: ${{ secrets.SERVICE }}
+  AR_REPO: ${{ secrets.AR_REPO }} # 形如：us-central1-docker.pkg.dev/trusty-matrix-474712-m4/mcp
+  # 镜像名：<域名>/<项目>/<仓库>/<镜像名:tag>
+  IMAGE_NAME: mcp-server
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      REGION:     ${{ secrets.REGION }}
-      SERVICE:    ${{ secrets.SERVICE }}
-      AR_REPO:    ${{ secrets.AR_REPO }}
-      IMAGE:      ${{ secrets.AR_REPO }}:${{ github.sha }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 通过 OIDC 登录 GCP（不需要 JSON key）
-      - name: Auth to Google Cloud
+      - name: Auth to Google Cloud (OIDC)
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
-      - name: Set up gcloud
+      - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Configure Artifact Registry Docker auth
-        # ${AR_REPO%%/*} 取出仓库域前缀：us-central1-docker.pkg.dev
-        run: gcloud auth configure-docker "${AR_REPO%%/*}" --quiet
+        run: |
+          set -euxo pipefail
+          DOMAIN="${AR_REPO%%/*}"                # 例如：us-central1-docker.pkg.dev
+          gcloud auth configure-docker "$DOMAIN" --quiet
+          echo "Configured docker domain: $DOMAIN"
 
       - name: Build & push image
+        id: build
         run: |
+          set -euxo pipefail
+          IMAGE="${AR_REPO}/${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "Building image: $IMAGE"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region:  ${{ env.REGION }}
-          image:   ${{ env.IMAGE }}
-          allow-unauthenticated: true
+        run: |
+          set -euxo pipefail
+          IMAGE="${{ steps.build.outputs.image }}"
+          echo "Deploying $IMAGE to Cloud Run service ${SERVICE}"
+          gcloud run deploy "${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --platform=managed \
+            --image="${IMAGE}" \
+            --allow-unauthenticated
