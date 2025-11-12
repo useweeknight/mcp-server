@@ -16,6 +16,36 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 const app = express();
 
+// ==== CORS（仅允许前端域名）====
+const ALLOWED_ORIGINS = new Set([
+  // 生产
+  'https://app.useweeknight.com',
+  // Staging（自定义域）
+  'https://staging.useweeknight.com',
+  // 当前 vercel 预览域（会变动；如需更多预览域，后续加到 CORS_ORIGINS 环境变量里）
+  'https://app-web-tawny-zeta.vercel.app',
+  ...EXTRA_CORS,
+]);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    // 如需跨域携带 Cookie/Session 或浏览器自动带上 Authorization，取消下一行注释，
+    // 同时前端 fetch 需加 { credentials: 'include' }
+    // res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '600'); // 预检缓存 10 分钟
+    res.setHeader('Vary', 'Origin'); // 防缓存串源
+  }
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end(); // 预检直返
+  }
+  next();
+});
+
 // ==== （可选）请求日志，便于在 Cloud Run 日志中确认路由是否被打到 ====
 app.use((req, _res, next) => {
   console.log(`[REQ] ${req.method} ${req.url}`);
