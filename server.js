@@ -16,33 +16,34 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 const app = express();
 
-// ==== CORS（仅允许前端域名）====
+// ==== CORS（仅允许前端域名；支持通过 CORS_ORIGINS 追加）====
+const ENV_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 const ALLOWED_ORIGINS = new Set([
   // 生产
   'https://app.useweeknight.com',
-  // Staging（自定义域）
+  // Staging
   'https://staging.useweeknight.com',
-  // 当前 vercel 预览域（会变动；如需更多预览域，后续加到 CORS_ORIGINS 环境变量里）
+  // 当前 vercel 预览域（如有新的就放到 CORS_ORIGINS 环境变量里）
   'https://app-web-tawny-zeta.vercel.app',
-  ...EXTRA_CORS,
+  ...ENV_ORIGINS,
 ]);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    // 如需跨域携带 Cookie/Session 或浏览器自动带上 Authorization，取消下一行注释，
-    // 同时前端 fetch 需加 { credentials: 'include' }
+    // 如需携带 Cookie/Session 或浏览器自动带 Authorization：
     // res.setHeader('Access-Control-Allow-Credentials', 'true');
-
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Max-Age', '600'); // 预检缓存 10 分钟
-    res.setHeader('Vary', 'Origin'); // 防缓存串源
+    res.setHeader('Access-Control-Max-Age', '600');
+    res.setHeader('Vary', 'Origin');
   }
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end(); // 预检直返
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
 
