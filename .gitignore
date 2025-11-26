@@ -1,0 +1,59 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 构建产物
+dist/
+build/
+
+# 本地环境变量（保留模板）
+.env
+.env.local
+.env.*.local
+env-temp.txt
+env-config.txt
+!.env.example
+
+# 日志
+logs/
+*.log
+
+# 测试 / 覆盖率
+coverage/
+*.lcov
+
+# 临时 / 备份
+/backups/
+/backup/
+/generated/
+*.tmp
+*.temp
+*.bak
+*~
+
+# IDE / 编辑器
+.vscode/
+*.code-workspace
+.idea/
+*.iml
+*.swp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 压缩包
+*.zip
+*.tar
+*.tgz
+*.gz
+*.rar
+
+# 调试 API / 临时文件（如有）
+app/api/debug/
+tsconfig.tsbuildinfo
