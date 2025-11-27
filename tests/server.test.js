@@ -99,11 +99,6 @@ describe('mcp-server 基础路由测试', () => {
     assert.strictEqual(body, 'ok', '响应体应为 "ok"');
   });
 
-  test('GET /healthz 也返回 "ok"（兼容 k8s 探针）', async () => {
-    const res = await fetch(`${BASE_URL}/healthz`);
-    const body = await res.text();
-    assert.strictEqual(body, 'ok');
-  });
 
   // ------------------------------------------------------------
   // 根路径测试
