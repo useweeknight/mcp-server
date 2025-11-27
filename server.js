@@ -58,8 +58,7 @@ app.get('/', (_req, res) => {
   res.send('Weeknight MCP server is up!\n');
 });
 
-// ==== 健康检查（监控/脚本/探活用）====
-app.get('/healthz', (_req, res) => res.send('ok'));
+// ==== 健康检查（Cloud Run 探活用）====
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ==== （可选）版本回显（Cloud Run 注入 K_REVISION）====
 app.get('/version', (_req, res) => {

@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test ./tests/server.test.js",
+    "lint": "echo 'No lint configured'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
