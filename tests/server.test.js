@@ -2,7 +2,7 @@
  * mcp-server 基础路由与 CORS 测试
  *
  * 使用 Node.js 内置 test runner（Node 20+）
- * 通过 spawn 子进程启动服务器，用原生 fetch 发请求
+ * 通过 fork 子进程启动服务器，用原生 fetch 发请求
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
@@ -104,6 +104,7 @@ describe('mcp-server 基础路由测试', () => {
     const body = await res.text();
     assert.strictEqual(body, 'ok', '响应体应为 "ok"');
   });
+
 
   // ------------------------------------------------------------
   // 根路径测试
