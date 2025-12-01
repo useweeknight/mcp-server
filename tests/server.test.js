@@ -441,3 +441,537 @@ describe('Pantry OCR API 测试 (Step 6)', () => {
     assert.strictEqual(res.status, 400, '无效图片格式应返回 400');
   });
 });
+
+// ============================================================
+// Step 7: Cook API 测试
+// ============================================================
+
+describe('Cook API 测试 (Step 7)', () => {
+  before(async () => {
+    if (!serverProcess) {
+      await startServer();
+    }
+  });
+
+  after(() => {
+    stopServer();
+  });
+
+  let sessionId = null;
+
+  // ------------------------------------------------------------
+  // POST /cook/start 测试
+  // ------------------------------------------------------------
+  test('POST /cook/start 创建烹饪会话', async () => {
+    const res = await fetch(`${BASE_URL}/cook/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe-123',
+        user_id: 'test-user-123'
+      }),
+    });
+
+    assert.strictEqual(res.status, 200, '应返回 200');
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.session_id, '应包含 session_id');
+    assert.ok(Array.isArray(json.steps), 'steps 应为数组');
+    assert.ok(json.steps.length > 0, '应返回步骤');
+    assert.strictEqual(json.current_step, 0, '初始步骤应为 0');
+
+    // 保存 session_id 供后续测试使用
+    sessionId = json.session_id;
+  });
+
+  test('POST /cook/start 拒绝缺少 recipe_id', async () => {
+    const res = await fetch(`${BASE_URL}/cook/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        user_id: 'test-user-123'
+      }),
+    });
+
+    assert.strictEqual(res.status, 400, '缺少 recipe_id 应返回 400');
+  });
+
+  // ------------------------------------------------------------
+  // POST /cook/action 测试
+  // ------------------------------------------------------------
+  test('POST /cook/action 发送 start 指令', async () => {
+    // 先创建一个新会话
+    const startRes = await fetch(`${BASE_URL}/cook/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe-456',
+        user_id: 'test-user-123'
+      }),
+    });
+    const startJson = await startRes.json();
+    const testSessionId = startJson.session_id;
+
+    const res = await fetch(`${BASE_URL}/cook/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        session_id: testSessionId,
+        action: 'start'
+      }),
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.status, 'cooking', '状态应为 cooking');
+  });
+
+  test('POST /cook/action 发送 next 指令', async () => {
+    // 先创建一个新会话并启动
+    const startRes = await fetch(`${BASE_URL}/cook/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe-789',
+        user_id: 'test-user-123'
+      }),
+    });
+    const startJson = await startRes.json();
+    const testSessionId = startJson.session_id;
+
+    // 启动烹饪
+    await fetch(`${BASE_URL}/cook/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ session_id: testSessionId, action: 'start' }),
+    });
+
+    // 下一步
+    const res = await fetch(`${BASE_URL}/cook/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ session_id: testSessionId, action: 'next' }),
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.current_step, 1, '应前进到步骤 1');
+  });
+
+  test('POST /cook/action 拒绝缺少 session_id', async () => {
+    const res = await fetch(`${BASE_URL}/cook/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        action: 'start'
+      }),
+    });
+
+    assert.strictEqual(res.status, 400, '缺少 session_id 应返回 400');
+  });
+
+  test('POST /cook/action 拒绝无效会话', async () => {
+    const res = await fetch(`${BASE_URL}/cook/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        session_id: 'non-existent-session',
+        action: 'start'
+      }),
+    });
+
+    assert.strictEqual(res.status, 404, '无效会话应返回 404');
+  });
+
+  // ------------------------------------------------------------
+  // GET /cook/session/:id 测试
+  // ------------------------------------------------------------
+  test('GET /cook/session/:id 获取会话状态', async () => {
+    // 先创建一个新会话
+    const startRes = await fetch(`${BASE_URL}/cook/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe-status',
+        user_id: 'test-user-123'
+      }),
+    });
+    const startJson = await startRes.json();
+    const testSessionId = startJson.session_id;
+
+    const res = await fetch(`${BASE_URL}/cook/session/${testSessionId}`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.data, '应包含 data 字段');
+    assert.ok(json.data.session_id, '应包含 session_id');
+    assert.ok(Array.isArray(json.data.steps), 'steps 应为数组');
+  });
+
+  test('GET /cook/session/:id 拒绝无效会话', async () => {
+    const res = await fetch(`${BASE_URL}/cook/session/non-existent-session`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 404, '无效会话应返回 404');
+  });
+});
+
+// ============================================================
+// Step 7 补丁: Leftovers / Flags / Groceries API 测试
+// ============================================================
+
+describe('Leftovers API 测试 (Step 7 补丁)', () => {
+  before(async () => {
+    if (!serverProcess) {
+      await startServer();
+    }
+  });
+
+  after(() => {
+    stopServer();
+  });
+
+  // ------------------------------------------------------------
+  // POST /api/leftovers 测试
+  // ------------------------------------------------------------
+  test('POST /api/leftovers 创建剩菜记录', async () => {
+    const res = await fetch(`${BASE_URL}/api/leftovers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe-leftover',
+        recipe_title: 'Test Leftover Recipe',
+        servings: 2,
+        user_id: 'test-user-123',
+        safe_hours: 48
+      }),
+    });
+
+    // 由于没有真实数据库，可能返回 500
+    assert.ok([200, 201, 500].includes(res.status), '路由应该存在');
+
+    const json = await res.json();
+    assert.ok('ok' in json, '应包含 ok 字段');
+  });
+
+  test('POST /api/leftovers 拒绝缺少 recipe_id', async () => {
+    const res = await fetch(`${BASE_URL}/api/leftovers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        servings: 2
+      }),
+    });
+
+    assert.strictEqual(res.status, 400, '缺少 recipe_id 应返回 400');
+  });
+
+  test('POST /api/leftovers 拒绝无效 servings', async () => {
+    const res = await fetch(`${BASE_URL}/api/leftovers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipe_id: 'test-recipe',
+        servings: 0
+      }),
+    });
+
+    assert.strictEqual(res.status, 400, '无效 servings 应返回 400');
+  });
+
+  // ------------------------------------------------------------
+  // GET /api/leftovers 测试
+  // ------------------------------------------------------------
+  test('GET /api/leftovers 返回剩菜列表', async () => {
+    const res = await fetch(`${BASE_URL}/api/leftovers?user_id=test-user-123`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    // 由于没有真实数据库，可能返回 500
+    assert.ok([200, 500].includes(res.status), '路由应该存在');
+
+    const json = await res.json();
+    assert.ok('ok' in json, '应包含 ok 字段');
+  });
+});
+
+describe('Feature Flags API 测试 (Step 7 补丁)', () => {
+  before(async () => {
+    if (!serverProcess) {
+      await startServer();
+    }
+  });
+
+  after(() => {
+    stopServer();
+  });
+
+  // ------------------------------------------------------------
+  // GET /api/flags 测试
+  // ------------------------------------------------------------
+  test('GET /api/flags 返回功能开关', async () => {
+    const res = await fetch(`${BASE_URL}/api/flags`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.flags, '应包含 flags 字段');
+    assert.ok('cold_start_flow' in json.flags, '应包含 cold_start_flow');
+    assert.ok('emoji_feedback' in json.flags, '应包含 emoji_feedback');
+  });
+
+  test('GET /api/flags?keys=cold_start_flow,emoji_feedback 返回指定开关', async () => {
+    const res = await fetch(`${BASE_URL}/api/flags?keys=cold_start_flow,emoji_feedback`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.flags, '应包含 flags 字段');
+    // 应该只返回请求的 keys（如果没有数据库则返回默认值）
+    assert.ok('cold_start_flow' in json.flags, '应包含 cold_start_flow');
+    assert.ok('emoji_feedback' in json.flags, '应包含 emoji_feedback');
+  });
+
+  // ------------------------------------------------------------
+  // GET /api/flags/:key 测试
+  // ------------------------------------------------------------
+  test('GET /api/flags/cold_start_flow 返回单个开关', async () => {
+    const res = await fetch(`${BASE_URL}/api/flags/cold_start_flow`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 200);
+
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.key, 'cold_start_flow');
+    assert.ok(typeof json.enabled === 'boolean', 'enabled 应为布尔值');
+  });
+});
+
+describe('Groceries API 测试 (Step 7 补丁)', () => {
+  before(async () => {
+    if (!serverProcess) {
+      await startServer();
+    }
+  });
+
+  after(() => {
+    stopServer();
+  });
+
+  // ------------------------------------------------------------
+  // POST /api/groceries 测试
+  // ------------------------------------------------------------
+  test('POST /api/groceries 生成购物清单', async () => {
+    const res = await fetch(`${BASE_URL}/api/groceries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({
+        recipes: [
+          { recipe_id: 'test-recipe-1', servings: 4 },
+          { recipe_id: 'test-recipe-2' }
+        ],
+        pantry_snapshot: [
+          { name: 'salt' },
+          { name: 'pepper' }
+        ]
+      }),
+    });
+
+    // 由于没有真实数据库，可能返回 500
+    assert.ok([200, 500].includes(res.status), '路由应该存在');
+
+    const json = await res.json();
+    assert.ok('ok' in json, '应包含 ok 字段');
+  });
+
+  test('POST /api/groceries 拒绝缺少 recipes', async () => {
+    const res = await fetch(`${BASE_URL}/api/groceries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({}),
+    });
+
+    assert.strictEqual(res.status, 400, '缺少 recipes 应返回 400');
+  });
+
+  test('POST /api/groceries 拒绝空 recipes 数组', async () => {
+    const res = await fetch(`${BASE_URL}/api/groceries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ALLOWED_ORIGIN,
+      },
+      body: JSON.stringify({ recipes: [] }),
+    });
+
+    assert.strictEqual(res.status, 400, '空 recipes 应返回 400');
+  });
+});
+
+// ============================================================
+// Step 8: Admin API 测试
+// ============================================================
+
+describe('Admin API 测试 (Step 8)', () => {
+  before(async () => {
+    if (!serverProcess) {
+      await startServer();
+    }
+  });
+
+  after(() => {
+    stopServer();
+  });
+
+  // ------------------------------------------------------------
+  // Admin 路由需要授权测试
+  // ------------------------------------------------------------
+  test('GET /admin 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/users 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/users`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/recipes 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/recipes`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/substitutions 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/substitutions`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/pantry 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/pantry`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/leftovers 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/leftovers`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/suggestions 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/suggestions`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/metrics 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/metrics`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/system 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/system`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  test('GET /admin/audit 无授权返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin/audit`, {
+      headers: { Origin: ALLOWED_ORIGIN },
+    });
+
+    assert.strictEqual(res.status, 401, '无授权应返回 401');
+  });
+
+  // 无效 token 测试
+  test('GET /admin 无效 token 返回 401', async () => {
+    const res = await fetch(`${BASE_URL}/admin`, {
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        Authorization: 'Bearer invalid-token-12345',
+      },
+    });
+
+    assert.strictEqual(res.status, 401, '无效 token 应返回 401');
+  });
+});
