@@ -131,7 +131,7 @@ app.get('/', (_req, res) => {
   res.send('Weeknight MCP server is up!\n');
 });
 
-// 健康检查
+// ==== 健康检查（Cloud Run 探活用）====
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
 // 版本信息
