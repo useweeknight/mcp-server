@@ -24,6 +24,13 @@ import recipesRouter from './src/routes/recipes.js';
 import telemetryRouter from './src/routes/telemetry.js';
 import realtimeRouter from './src/routes/realtime.js';
 import pantryRouter from './src/routes/pantry.js';
+import cookRouter from './src/routes/cook.js';
+import leftoversRouter from './src/routes/leftovers.js';
+import flagsRouter from './src/routes/flags.js';
+import groceriesRouter from './src/routes/groceries.js';
+
+// Admin 路由 (Step 8)
+import adminRouter from './src/admin/index.js';
 
 // =============================================================================
 // 环境变量
@@ -157,6 +164,21 @@ app.use('/recipes', recipesRouter);
 
 // Telemetry 埋点
 app.use('/telemetry', telemetryRouter);
+
+// Cook 烹饪会话 (Step 7)
+app.use('/cook', cookRouter);
+
+// Leftovers 剩菜管理 (Step 7 补丁)
+app.use('/api/leftovers', leftoversRouter);
+
+// Feature Flags 功能开关 (Step 7 补丁)
+app.use('/api/flags', flagsRouter);
+
+// Groceries 购物清单 (Step 7 补丁)
+app.use('/api/groceries', groceriesRouter);
+
+// Admin API (Step 8)
+app.use('/admin', adminRouter);
 
 // =============================================================================
 // 上传接口（保留原有功能）
